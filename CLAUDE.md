@@ -114,6 +114,10 @@ calendar reminder before the next sweep.
   map layer + adds the block sheet's "<route> sweeper route" line (loadRoutes/routeFor, keyed by
   cnn like ENF/SWP). Local build (needs `pip install xlrd` + the .xls set via CURB_SWEEP_SCHEDULE_XLS;
   NOT in the data-refresh CI, like build:enforcement). The layer's run DIRECTION stays inferred.
+- api/block.js + sitemap-blocks.xml (scripts/build-block-sitemap.mjs, `npm run build:blocksitemap`) —
+  /b/<cnn> server-rendered block share/landing pages (unique <title> + meta + citation ticket-time),
+  ~10.5k long-tail SEO pages. api/block 302-redirects unknown cnns to /, so the sitemap lists ONLY
+  enforcement ∩ currently-swept cnns (all render 200). Separate 2nd sitemap; both are in robots.txt.
 - docs/ — sweeper-data research + ready-to-send public-records requests.
 - README.md — human-facing run/deploy notes.
 
