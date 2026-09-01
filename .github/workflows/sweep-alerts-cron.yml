@@ -31,7 +31,7 @@ jobs:
         env:
           TEST: ${{ github.event.inputs.test }}
         run: |
-          url="https://curb.guide/api/send-notifications"
+          url="https://curb-sand.vercel.app/api/send-notifications"
           [ -n "$TEST" ] && url="$url?test=$TEST"
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
