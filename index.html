@@ -770,7 +770,7 @@ const LOADRULES="https://data.sfgov.org/resource/6cqg-dxku.json"; // metered col
 const MIN_ZOOM_DATA=15;
 const OFFSET=5; // metres each side of centreline
 // Web Push: VAPID *public* key (safe to ship to the client). Matches VAPID_PRIVATE_KEY on the server.
-const VAPID_PUBLIC_KEY="BNh-13Y456HR3O_-AvNP_kEIIui1YvbEumSFLF0l-VD94H_qtGpAQPush_WycVNXYbnt6s9UVC8FXI9-crT-8Ao";
+const VAPID_PUBLIC_KEY="BHhULMoT4Ck_8rYoOpLn03rvLcI8CiiM5tAwc430Zbd5GIJbVKh_fTM0LU5br12sQThgHQN_DN3hpPdhRSSgiRw";
 // Cookieless custom events (Vercel Web Analytics). No-op until the dashboard toggle is on
 // and /_vercel/insights/script.js has loaded — guarded so it never throws in sandbox/dev.
 function track(name){try{if(window.va)window.va('event',{name});}catch(_){}}
@@ -1780,6 +1780,21 @@ async function onAlertTap(spot, btn){
       body:JSON.stringify({subscription:sub.toJSON(), spot})
     });
     if(!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.note||d.error||('save failed ('+res.status+')')); }
+    // --- auto-park: catch the one-time ownerProof and mint a Shortcut token ---
+    try{
+      const d = await res.json();
+      if (d.ownerProof && !localStorage.getItem('curbParkToken')){
+        const t = await fetch('/api/enable-auto-park', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ subscription: sub.toJSON(), ownerProof: d.ownerProof })
+        }).then(r => r.json());
+        if (t.token){
+          localStorage.setItem('curbParkToken', t.token);
+          alert('Auto-park token:\n\n' + t.token);
+        }
+      }
+    }catch(_){}
     try{localStorage.setItem('curbAlertKey',spotKey(spot));}catch(_){}
     track('alert_armed');  // the activation→retention metric
     btn.classList.remove('busy','alt'); btn.classList.add('on'); btn.textContent='✓ Alerts on';
