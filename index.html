@@ -300,6 +300,9 @@
   .carx{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);
     background:rgba(242,236,223,.95);color:var(--ink);font:inherit;font-size:12px;font-weight:800;
     cursor:pointer;box-shadow:2px 2px 0 var(--ink);line-height:1}
+  .car-pin{width:34px;height:34px;border-radius:50%;background:var(--paper);border:2.5px solid var(--ink);
+    box-shadow:2.5px 2.5px 0 var(--ink);display:flex;align-items:center;justify-content:center;
+    font-size:17px;cursor:pointer}
   /* invisible hit-area expansion to ~44px effective targets (visuals unchanged);
      .dchip uses ::before because .dchip.today::after is the red today-dot */
   .dchip,.datechip,.logo{position:relative}
@@ -1973,16 +1976,22 @@ function placeYou(lat,lng,fly,cnnHint,quiet){
     if(spot.limits)chip.title=String(spot.limits);
     row.hidden=false;
     const cnn=String(spot.cnn).replace(/\D/g,'');
-    chip.onclick=async()=>{
-      try{
-        const rr=await fetch(SWEEP+`?$select=line&$where=cnn='${cnn}'&$limit=1`);
-        const dd=await rr.json(); const c=dd[0]&&dd[0].line&&dd[0].line.coordinates;
-        if(!c||!c.length)return;
-        const mid=c[Math.floor(c.length/2)];
-        map.setView([mid[1],mid[0]],17);
-        setTimeout(()=>openNearestWhenReady(mid[1],mid[0],cnn,0),700);
-      }catch(_){}
-    };
+    // Pin the car on the map, on the stored curb SIDE of the block (offsetLine, R=+1/L=-1 —
+    // the same math the curb rendering uses). The server never holds the raw GPS point (one-spot
+    // privacy), so the pin marks the block side, not the exact spot; that's the trade, not a bug.
+    let mid=null;
+    const gotoCar=()=>{if(!mid)return;map.setView(mid,17);setTimeout(()=>openNearestWhenReady(mid[0],mid[1],cnn,0),700);};
+    try{
+      const rr=await fetch(SWEEP+`?$select=line&$where=cnn='${cnn}'&$limit=1`);
+      const dd=await rr.json(); const c=dd[0]&&dd[0].line&&dd[0].line.coordinates;
+      if(c&&c.length){
+        const side=offsetLine(c.map(p=>[p[1],p[0]]),OFFSET,spot.sideKey==='L'?-1:1);
+        mid=side[Math.floor(side.length/2)];
+        L.marker(mid,{icon:L.divIcon({className:'',html:'<div class="car-pin">🚗</div>',iconSize:[34,34],iconAnchor:[17,17]})})
+          .addTo(map).on('click',gotoCar);
+      }
+    }catch(_){}
+    chip.onclick=gotoCar;
     document.getElementById('carX').onclick=()=>{
       row.hidden=true;
       try{localStorage.setItem('curbCarDismiss',String(d.savedAt));}catch(_){}
