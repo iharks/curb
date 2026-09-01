@@ -1986,7 +1986,19 @@ function placeYou(lat,lng,fly,cnnHint,quiet){
       const dd=await rr.json(); const c=dd[0]&&dd[0].line&&dd[0].line.coordinates;
       if(c&&c.length){
         const side=offsetLine(c.map(p=>[p[1],p[0]]),OFFSET,spot.sideKey==='L'?-1:1);
-        mid=side[Math.floor(side.length/2)];
+        // Arc-length midpoint, NOT the middle vertex — most SF centerlines are a 2-point
+        // straight segment, whose "middle vertex" is a corner. Mid-block reads unambiguously.
+        const midOf=ll=>{
+          let len=0; const d=[0];
+          for(let i=1;i<ll.length;i++){len+=Math.hypot(ll[i][0]-ll[i-1][0],(ll[i][1]-ll[i-1][1])*Math.cos(ll[i][0]*Math.PI/180));d.push(len);}
+          const h=len/2;
+          for(let i=1;i<ll.length;i++){
+            if(d[i]>=h){const t=(h-d[i-1])/((d[i]-d[i-1])||1);
+              return [ll[i-1][0]+(ll[i][0]-ll[i-1][0])*t, ll[i-1][1]+(ll[i][1]-ll[i-1][1])*t];}
+          }
+          return ll[Math.floor(ll.length/2)];
+        };
+        mid=midOf(side);
         L.marker(mid,{icon:L.divIcon({className:'',html:'<div class="car-pin">🚗</div>',iconSize:[34,34],iconAnchor:[17,17]})})
           .addTo(map).on('click',gotoCar);
       }
