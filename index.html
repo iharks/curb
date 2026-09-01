@@ -288,6 +288,18 @@
     background:rgba(242,236,223,.92);color:var(--ink);border:2px solid var(--ink);border-radius:13px;
     padding:7px 11px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
   .dchip.on{background:var(--ink);color:var(--paper)}
+  /* auto-park (fork): "where's my car" chip — a third top row, shown only when the server
+     holds a watch for this phone (armed by the Shortcut via /api/parked) */
+  .carrow{pointer-events:auto;display:flex;gap:8px;align-items:center}
+  .carrow[hidden]{display:none}
+  .carchip{display:inline-flex;align-items:center;gap:7px;min-width:0;font:inherit;font-size:12.5px;
+    font-weight:700;background:rgba(242,236,223,.95);color:var(--ink);border:2px solid var(--ink);
+    border-radius:13px;padding:8px 12px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);text-align:left}
+  .carchip small{font-weight:600;color:var(--ink-soft);white-space:nowrap}
+  .carchip .ccor{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .carx{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);
+    background:rgba(242,236,223,.95);color:var(--ink);font:inherit;font-size:12px;font-weight:800;
+    cursor:pointer;box-shadow:2px 2px 0 var(--ink);line-height:1}
   /* invisible hit-area expansion to ~44px effective targets (visuals unchanged);
      .dchip uses ::before because .dchip.today::after is the red today-dot */
   .dchip,.datechip,.logo{position:relative}
@@ -668,6 +680,10 @@
     <button class="dchip" data-day="5">Fri</button>
     <button class="dchip" data-day="6">Sat</button>
     <button class="dchip" data-day="0">Sun</button>
+  </div>
+  <div class="carrow" id="carRow" hidden>
+    <button class="carchip" id="carChip" data-tip="Go to your parked car" data-tip-pos="b"></button>
+    <button class="carx" id="carX" aria-label="Hide parked-car chip">✕</button>
   </div>
 </div>
 
@@ -1925,6 +1941,52 @@ function placeYou(lat,lng,fly,cnnHint,quiet){
     const mid=c[Math.floor(c.length/2)];
     map.setView([mid[1],mid[0]],17);
     setTimeout(()=>openNearestWhenReady(mid[1],mid[0],m[1],0),700);
+  }catch(_){}
+})();
+
+/* Auto-park (fork): the Shortcut arms the watch server-side, so the page has no local record
+   of it. Ask /api/my-spot which block this phone's push subscription is watching and surface
+   it as a tappable chip (fly to the block + open its sheet). ✕ hides the chip until the next
+   re-park — dismissal is keyed to the watch's savedAt stamp, which every new park refreshes. */
+(async function myCar(){
+  if(EMBED)return;
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))return;
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.getSubscription();
+    if(!sub)return;
+    const r=await fetch('/api/my-spot',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subscription:sub.toJSON()})});
+    if(!r.ok)return;
+    const d=await r.json(); const spot=d&&d.spot;
+    if(!spot||!spot.cnn)return;
+    let dis=null; try{dis=localStorage.getItem('curbCarDismiss');}catch(_){}
+    if(dis&&dis===String(d.savedAt))return;
+    const row=document.getElementById('carRow'), chip=document.getElementById('carChip');
+    const cor=document.createElement('span'); cor.className='ccor';
+    cor.textContent='🚗 '+(spot.corridor||'Your block')+(spot.blockside?' · '+String(spot.blockside).toLowerCase()+' side':'');
+    chip.textContent=''; chip.appendChild(cor);
+    let t=(spot.rule&&spot.rule.weekday)?('swept '+spot.rule.weekday+' '+fmtHour(+spot.rule.fromhour)):'';
+    const ns=spot.nextSweepISO?new Date(spot.nextSweepISO):null;
+    if(ns&&+ns>Date.now()){const h=Math.round((+ns-Date.now())/36e5); if(h<=48)t+=(t?' · ':'')+'in ~'+h+'h';}
+    if(t){const sm=document.createElement('small');sm.textContent=t;chip.appendChild(sm);}
+    if(spot.limits)chip.title=String(spot.limits);
+    row.hidden=false;
+    const cnn=String(spot.cnn).replace(/\D/g,'');
+    chip.onclick=async()=>{
+      try{
+        const rr=await fetch(SWEEP+`?$select=line&$where=cnn='${cnn}'&$limit=1`);
+        const dd=await rr.json(); const c=dd[0]&&dd[0].line&&dd[0].line.coordinates;
+        if(!c||!c.length)return;
+        const mid=c[Math.floor(c.length/2)];
+        map.setView([mid[1],mid[0]],17);
+        setTimeout(()=>openNearestWhenReady(mid[1],mid[0],cnn,0),700);
+      }catch(_){}
+    };
+    document.getElementById('carX').onclick=()=>{
+      row.hidden=true;
+      try{localStorage.setItem('curbCarDismiss',String(d.savedAt));}catch(_){}
+    };
   }catch(_){}
 })();
 
