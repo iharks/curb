@@ -176,8 +176,27 @@ export default async function handler(req, res) {
     }
 
     res.status(200).json({ ok: true, web: { checked: subs.length, sent, pruned, rearmed }, ios: { configured: iosConfigured, checked: iosSubs.length, sent: iosSent, pruned: iosPruned, rearmed: iosRearmed, ...(iosError ? { error: iosError } : {}) } });
+    await heartbeat(true);
   } catch (e) {
     console.error('send-notifications failed:', e);
     res.status(500).json({ error: 'internal error' });
+    await heartbeat(false);
+  }
+}
+
+// Dead-man switch: ping healthchecks.io after every completed run so *silence* (scheduler disabled,
+// env broken, account lapsed) raises an alert instead of going unnoticed. No-op unless HC_PING_URL is
+// set. Bounded by a 5 s abort so it can never hold the function open.
+async function heartbeat(ok) {
+  const url = process.env.HC_PING_URL;
+  if (!url) return;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    await fetch(ok ? url : `${url.replace(/\/$/, '')}/fail`, { method: 'POST', signal: ctrl.signal });
+  } catch (e) {
+    console.warn('healthchecks ping failed:', e.message || e);
+  } finally {
+    clearTimeout(t);
   }
 }
