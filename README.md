@@ -64,7 +64,7 @@ iOS — two paths:
 
 ## Map basemap (Google Maps, optional)
 With a Google **Map Tiles API** key the basemap uses official Google tiles; without one it
-falls back to keyless CARTO Voyager. The key is a *client* key — **restrict it by HTTP referrer
+falls back to keyless OpenStreetMap tiles (desaturated). The key is a *client* key — **restrict it by HTTP referrer
 + API** in Google Cloud Console (add `http://localhost:3000/*`, `https://*.vercel.app/*`, and
 your domain).
 

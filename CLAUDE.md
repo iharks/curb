@@ -13,7 +13,8 @@ calendar reminder before the next sweep.
 - Vanilla JS + Leaflet 1.9.4 (from cdnjs) for the map.
 - Basemap: official Google Map Tiles API when `GMAPS_KEY` (or `window.GMAPS_KEY`) is set —
   session-token flow in `initBasemap()`, viewport attribution refreshed on moveend. Falls
-  back to keyless CARTO Voyager raster tiles when no key / on any failure. Leaflet stays the
+  back to keyless OpenStreetMap raster tiles (desaturated via `.osm-muted`; CARTO's keyless tiles
+  started demanding an API key in Sep 2026) when no key / on any failure. Leaflet stays the
   map engine either way. The Google key is a client key (referrer-restrict it) kept OUT of the
   public repo: local dev reads a gitignored `config.js` (from `config.example.js`); on Vercel,
   `api/config.js` emits `window.GMAPS_KEY` from the `GMAPS_KEY` env var and `vercel.json`
@@ -141,7 +142,7 @@ The calendar reminder (＋Reminder button → .ics with a 30-min VALARM) already
 - **Basemap style**: Google tiles are styled with `MAP_STYLE` ("Parchment Draft" from
   styledmap.com, passed via createSession `styles`). Roads are deliberately neutral
   near-paper (#f6f1e6/#d8d2c4), NOT the theme's orange-tan — the amber "soon" curb lines
-  must keep ~3:1 contrast against the road fill. CARTO fallback stays unstyled.
+  must keep ~3:1 contrast against the road fill. The OSM fallback is desaturated (`.osm-muted`) for the same reason.
 - **Desktop layout** (`@media min-width:768px`): the bottom sheet docks as a floating
   card bottom-left; top search cluster capped at 480px; zoom control moves bottomright
   (tracked live via `mqDesktop` change listener, not a one-time check).

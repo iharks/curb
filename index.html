@@ -35,7 +35,7 @@
 <meta name="twitter:image" content="https://curb.guide/og.png?v=2">
 <meta name="twitter:image:alt" content="CURB — SF street parking map with colored curb lines">
 <link rel="preconnect" href="https://tile.googleapis.com" crossorigin>
-<link rel="preconnect" href="https://a.basemaps.cartocdn.com" crossorigin>
+<link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C1121F">
 <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg">
@@ -55,7 +55,7 @@
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="preconnect" href="https://data.sf.gov">
 <link rel="preconnect" href="https://tile.googleapis.com">
-<link rel="preconnect" href="https://a.basemaps.cartocdn.com">
+<link rel="preconnect" href="https://tile.openstreetmap.org">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
@@ -292,6 +292,8 @@
      holds a watch for this phone (armed by the Shortcut via /api/parked) */
   .carrow{pointer-events:auto;display:flex;gap:8px;align-items:center}
   .carrow[hidden]{display:none}
+  /* keyless OSM fallback basemap: desaturate so the green/amber/red curb lines own the palette */
+  .osm-muted{filter:saturate(.12) contrast(.92) brightness(1.04)}
   .carchip{display:inline-flex;align-items:center;gap:7px;min-width:0;font:inherit;font-size:12.5px;
     font-weight:700;background:rgba(242,236,223,.95);color:var(--ink);border:2px solid var(--ink);
     border-radius:13px;padding:8px 12px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);text-align:left}
@@ -845,10 +847,12 @@ if(EMBED)document.documentElement.classList.add('embed');
 // resizes/rotation so the control never ends up under the open sheet.
 const zoomCtl=L.control.zoom({position:'bottomright'}).addTo(map);
 
-// Basemap: official Google Map Tiles API when GMAPS_KEY is set, else keyless CARTO (Google-style) fallback.
+// Basemap: official Google Map Tiles API when GMAPS_KEY is set, else keyless OpenStreetMap fallback (CARTO's
+// keyless tiles started stamping "API KEY REQUIRED" in Sep 2026). OSM is desaturated via .osm-muted so the
+// curb colors keep their contrast; the function keeps its old name so the call sites stay untouched.
 function addCarto(){
-  return L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    {subdomains:'abcd',maxZoom:20,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+  return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,className:'osm-muted',attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
 }
 // Remember a Google quota outage for the rest of the SF day so repeat visitors skip the doomed Google
 // attempt (no blank flash) and go straight to CARTO. Keyed by the SF calendar date, so it self-clears
