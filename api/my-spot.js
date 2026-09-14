@@ -16,7 +16,11 @@ export default async function handler(req, res) {
     }
     const rec = await getSub(ep);
     if (!rec || !rec.spot) { res.status(200).json({ ok: true, spot: null }); return; }
-    res.status(200).json({ ok: true, spot: rec.spot, savedAt: rec.savedAt || null });
+    // Fork: surface the replaced spot (set by /api/parked) so the UI can offer a one-tap Undo.
+    const prev = rec.prevSpot && rec.prevSpot.cnn
+      ? { corridor: rec.prevSpot.corridor || null, blockside: rec.prevSpot.blockside || null, savedAt: rec.prevSavedAt || null }
+      : null;
+    res.status(200).json({ ok: true, spot: rec.spot, savedAt: rec.savedAt || null, prev });
   } catch (e) {
     console.error('my-spot failed:', e);
     res.status(500).json({ error: 'internal error' });

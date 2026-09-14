@@ -20,7 +20,7 @@ vi.mock('@upstash/redis', () => ({
   },
 }));
 
-const { saveSub, advanceSpot, markNotified, loadAllSubs, getSub,
+const { saveSub, advanceSpot, markNotified, loadAllSubs, getSub, refreshSpot,
   saveToken, resolveToken, deleteTokensForEndpoint,
   ensureOwnerProof, verifyOwnerProof, claimSlot } = await import('./_store.js');
 
@@ -154,5 +154,33 @@ describe('legacy de-dupe migration (back-compat for live subscribers)', () => {
     const r = await rec();
     expect(r.notified.lead).toBe(spotA.nextSweepISO);
     expect(r.notified.eve).toBe(spotA.nextSweepISO);
+  });
+});
+
+// ---- fork: exact GPS fix + one-level Undo (refreshSpot / saveSub `extra`) ----
+describe('fork: refreshSpot + prevSpot', () => {
+  it('refreshSpot patches the spot, bumps savedAt, keeps de-dupe and prevSpot', async () => {
+    await saveSub(SUB, spotA, { prevSpot: spotB, prevSavedAt: 1 });
+    await markNotified(EP, spotA.nextSweepISO, 'lead');
+    const before = (await getSub(EP)).savedAt;
+    await new Promise(r => setTimeout(r, 3));
+    expect(await refreshSpot(EP, { lat: 37.77, lng: -122.44 })).toBe(true);
+    const rec = await getSub(EP);
+    expect(rec.spot.lat).toBe(37.77);
+    expect(rec.spot.corridor).toBe('Haight St');          // untouched fields survive
+    expect(rec.notified.lead).toBe(spotA.nextSweepISO);   // de-dupe kept → the cron will NOT re-push
+    expect(rec.prevSpot).toEqual(spotB);                   // undo target kept
+    expect(rec.savedAt).toBeGreaterThan(before);
+  });
+  it('advanceSpot/markNotified preserve prevSpot; a plain saveSub clears it (one level of undo)', async () => {
+    await saveSub(SUB, spotA, { prevSpot: spotB });
+    await advanceSpot(EP, spotB);
+    await markNotified(EP, spotB.nextSweepISO, 'eve');
+    expect((await getSub(EP)).prevSpot).toEqual(spotB);
+    await saveSub(SUB, spotA);
+    expect((await getSub(EP)).prevSpot).toBeUndefined();
+  });
+  it('refreshSpot is a no-op for an unknown endpoint', async () => {
+    expect(await refreshSpot('https://web.push.apple.com/nope', { lat: 1 })).toBe(false);
   });
 });

@@ -6,7 +6,7 @@
 // rate-limit ≤1/min per token, reject coords outside the SF bbox, numbers-only Socrata query (no
 // injection), and we NEVER persist the raw lat/lng — only the resolved block (one-spot privacy).
 import webpush from 'web-push';
-import { resolveToken, claimSlot, getSub, saveSub, deleteSub, storeReady } from './_store.js';
+import { resolveToken, claimSlot, getSub, saveSub, refreshSpot, deleteSub, storeReady } from './_store.js';
 import { inSfBbox, polygonAround, pickParkedSpot } from './_geo.js';
 import '../lib/sweep-core.js';
 const { sfWallToInstant, fmtHour, DAYLBL } = globalThis;
@@ -46,6 +46,21 @@ export default async function handler(req, res) {
     const sub = await getSub(rec.endpoint);
     if (!sub || !sub.subscription) { res.status(410).json({ error: 'subscription gone' }); return; }
 
+    // Fork: keep the exact fix (6 dp ≈ 10 cm). One user + a private store, so upstream's "block only"
+    // privacy trade is deliberately relaxed: the app pins the car and offers walking directions.
+    const fix = { lat: +la.toFixed(6), lng: +lo.toFixed(6) };
+
+    // Fork: same block + same curb side as the current watch → SILENT refresh. Neutralises the
+    // Bluetooth "phantom disconnect" at engine start (it re-parks the car where it already is) and
+    // keeps same-block re-parks quiet: the watch already covers this sweep, so no push, no de-dupe
+    // reset, no prevSpot churn — just a fresh fix + savedAt so the watch never ages out.
+    const cur = sub.spot;
+    if (cur && cur.cnn && String(cur.cnn) === String(spot.cnn) && cur.sideKey === spot.sideKey) {
+      await refreshSpot(rec.endpoint, fix);
+      res.status(200).json({ ok: true, same: true, corridor: cur.corridor, nextSweepISO: cur.nextSweepISO, note: 'already watching this block — refreshed' });
+      return;
+    }
+
     // Build + persist the watch (carries the recurring rule → forever-watch). saveSub stamps a fresh
     // savedAt (this IS live data) and resets de-dupe since it's a new sweep time.
     const ns = spot.ns;
@@ -54,10 +69,13 @@ export default async function handler(req, res) {
     const newSpot = {
       corridor: spot.corridor, limits: spot.limits, blockside: spot.blockside,
       nextSweepISO: ns.start.toISOString(), leadMinutes: 30,
-      rule: spot.rule, cnn: spot.cnn, sideKey: spot.sideKey,
+      rule: spot.rule, cnn: spot.cnn, sideKey: spot.sideKey, ...fix,
       ...(+eve < +ns.start ? { eveningISO: eve.toISOString() } : {}),
     };
-    await saveSub(sub.subscription, newSpot);
+    // Fork: remember what this park replaced so the app can offer a one-tap Undo (a disconnect in
+    // someone else's car fires the Shortcut too and would otherwise silently lose the real spot).
+    const extra = cur && cur.cnn ? { prevSpot: cur, prevSavedAt: sub.savedAt || null } : {};
+    await saveSub(sub.subscription, newSpot, extra);
 
     // Confirmation push (best-effort; prune a dead endpoint).
     if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {

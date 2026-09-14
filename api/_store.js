@@ -43,7 +43,7 @@ export function storeReady() {
 /** Upsert a subscription + its saved spot, keyed by endpoint.
  *  Notify state resets for a NEW sweep time but is preserved when the user re-arms
  *  the same sweep (re-tapping the button must not let the cron push twice). */
-export async function saveSub(subscription, spot) {
+export async function saveSub(subscription, spot, extra) {
   const r = redis();
   if (!r) throw new Error('store not configured (set KV_REST_API_URL / KV_REST_API_TOKEN)');
   let notified = {};
@@ -65,7 +65,8 @@ export async function saveSub(subscription, spot) {
   // savedAt = the last time the CLIENT armed/refreshed this watch with live data. The cron stops
   // re-arming once a watch goes stale past MAX_WATCH_AGE (see send-notifications) so a frozen rule
   // can't push wrong times forever after a city schedule change. advanceSpot preserves it.
-  const record = { subscription, spot: out, notified, savedAt: Date.now() };
+  // Fork: `extra` lets /api/parked attach record-level fields (prevSpot / prevSavedAt for Undo).
+  const record = { subscription, spot: out, notified, savedAt: Date.now(), ...(extra && typeof extra === 'object' ? extra : {}) };
   await r.hset(KEY, { [subscription.endpoint]: JSON.stringify(record) });
 }
 
@@ -118,6 +119,21 @@ export async function markNotified(endpoint, nextSweepISO, key = 'lead') {
   rec.notified[key] = nextSweepISO;
   delete rec.notifiedFor; delete rec.notifiedEveFor; // migrate off the legacy fields once touched
   await r.hset(KEY, { [endpoint]: JSON.stringify(rec) });
+}
+
+/** Fork: patch fields INTO the current spot (e.g. a fresh GPS fix) and bump savedAt WITHOUT touching
+ *  the de-dupe map or prevSpot. Used when a park resolves to the block already being watched, so the
+ *  Bluetooth "phantom disconnect" at engine start stays silent and the watch never ages out. */
+export async function refreshSpot(endpoint, patch) {
+  const r = redis();
+  if (!r) return false;
+  const v = await r.hget(KEY, endpoint);
+  const rec = typeof v === 'string' ? safeParse(v) : v;
+  if (!rec || !rec.spot) return false;
+  rec.spot = { ...rec.spot, ...(patch || {}) };
+  rec.savedAt = Date.now();
+  await r.hset(KEY, { [endpoint]: JSON.stringify(rec) });
+  return true;
 }
 
 /** Load a single subscription record by endpoint, or null. */
